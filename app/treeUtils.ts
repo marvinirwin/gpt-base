@@ -1,7 +1,4 @@
 import fs from "fs";
-
-
-
 const queryChatGPT = async (prompt: string): Promise<string> => {
     // @ts-ignore
     const { ChatGPTAPI } = await import('chatgpt')
@@ -37,8 +34,6 @@ const queryChatGPT = async (prompt: string): Promise<string> => {
             throw e.response.data;
         });
 };
-
-
 export interface TreeNode {
     question: string;
     context: string;
@@ -46,8 +41,8 @@ export interface TreeNode {
     parentId: number | null;
     id: number;
     children: TreeNode[];
+    summary: string;
 }
-
 // Function 1
 export function createDocument(node: TreeNode): string {
     let document = node.answer;
@@ -56,34 +51,24 @@ export function createDocument(node: TreeNode): string {
     });
     return document;
 }
-
-// Function 2
-export function extractQuestions(node: TreeNode): string[] {
-    const questionPattern = /{{ (.*?) }}/g;
-    let match;
-    const questions = [];
-    while ((match = questionPattern.exec(node.answer)) !== null) {
-        questions.push(match[1]);
-    }
-    return questions;
-}
-
-// Function 3
 export async function generateNode(question: string, context: string, parentId: number | null): Promise<TreeNode> {
-    const answer = await queryChatGPT(`Answer the following question: "${question}" 
+    const prompt = `Answer the following question: "${question}" 
     with the following context
-    ${context}`);
+    ${context}`;
+    console.log(prompt);
+    const answer = await queryChatGPT(prompt);
+    const summary = await queryChatGPT(`Can you summarize the following part of a document.  The double curly braces enclosed sentences represent questions/sections which need more context/detail.
+    ${answer}`);
     return {
         question,
         context,
         answer,
+        summary,
         parentId,
         id: Math.floor(Math.random() * 1000000), // Generate a random id
         children: [],
     };
 }
-
-// Function 4
 export function insertNode(node: TreeNode, tree: TreeNode): TreeNode {
     if (tree.id === node.parentId) {
         tree.children.push(node);
@@ -92,10 +77,8 @@ export function insertNode(node: TreeNode, tree: TreeNode): TreeNode {
             insertNode(node, childNode);
         });
     }
-    return tree;
+    return node;
 }
-
-// Function 5
 export async function generateFirstNode(initialQuestion: string, initialContext: string): Promise<TreeNode> {
     return await generateNode(initialQuestion, initialContext, null);
 }

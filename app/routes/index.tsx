@@ -1,32 +1,27 @@
-import React, {useRef, useEffect, useCallback, useState, useMemo} from 'react';
-
+import React, {useEffect, useRef, useState} from 'react';
 import {type ActionArgs} from '@remix-run/node';
-import {Form, useActionData, useNavigation, Link, useSubmit, useLocation, useNavigate} from '@remix-run/react';
+import {Form, Link, useActionData, useLocation, useNavigate, useNavigation, useSubmit} from '@remix-run/react';
 import {Send as SendIcon} from '~/components/Icons';
-import fs from "fs";
-import {createDocument, extractQuestions, generateNode, insertNode, TreeNode} from "~/treeUtils";
+import type { TreeNode} from "~/treeUtils";
+import {createDocument, generateNode, insertNode} from "~/treeUtils";
+import RenderGreen from "~/components/RenderGreen";
+import type {ReturnedDataProps} from "~/types";
+import {useAllQuestions} from "~/routes/useAllQuestions";
 
 interface DocumentNodeProps {
     node: TreeNode;
-}
-
-export type ReturnedDataProps = {
-    newNode: TreeNode
-} | {
-    error: string;
 }
 
 interface DocumentTreeProps {
     rootNode: TreeNode;
 }
 
-
 const DocumentNodeComponent: React.FC<DocumentNodeProps> = ({node}) => {
     return (
         <div style={{width: '100%', border: '1px solid black', marginBottom: '10px'}}>
-            <h3>{createDocument(node)}</h3>
-            <p>{node.context}</p>
-            <p>{node.question}</p>
+            <RenderGreen input={createDocument(node)}/>
+            <RenderGreen input={node.context}/>
+            <RenderGreen input={node.question}/>
             {node.children.map((childNode, index) => (
                 <DocumentNodeComponent key={index} node={childNode}/>
             ))}
@@ -66,39 +61,51 @@ export async function action({request}: ActionArgs): Promise<ReturnedDataProps> 
 }
 
 const baseTreeNode: TreeNode = {
-    question: "",
-    context: "",
+    question: `
+    `,
+    context: `
+        Respond to the following in markdown.
+        Concerning a research project which answers the question "To what extent does China’s dual circulation strategy affect foreign pharmaceutical companies operating in China?" for a bachelors in international business in Asia. 
+        For any part of my requests which requires more detail or outside information, leave a placeholder 
+        {{Use the contents of the brackets to ask me for more information, like research papers, or just more detailed sections}}.
+        Be EXTREMELY liberal with your placeholders.  
+        I need each section to be extremely detailed and sourced, 
+        so ANY points of ambiguity should be wrapped in these double curly braces and have a well formed question inside.
+    `,
     answer: "",
     parentId: null,
     id: -1,
+    summary: "Base Node",
     children: []
 }
+
 export default function IndexPage() {
-    const [documentTree, setDocumentTree] = useState<TreeNode>(
-        () => {
+    const [documentTree, setDocumentTree] = useState<TreeNode>(baseTreeNode);
+    useEffect(() => {
         // Load initial state from localStorage
         try {
-            return JSON.parse(localStorage.getItem('tree') || "");
+            const v = JSON.parse(localStorage.getItem('tree') || "");
+            debugger;
+            setDocumentTree(v)
         } catch (e) {
-            return baseTreeNode;
+            setDocumentTree(baseTreeNode)
         }
 
-    }
-    );
+    }, []);
+
     const [question, setQuestion] = useState<string>("");
     const [selectedNode, setSelectedNode] = useState<TreeNode>(baseTreeNode);
-    const allQuestions = useMemo(
-        () => extractQuestions(documentTree),
-        [documentTree]
-    );
+    const allQuestions = useAllQuestions(documentTree);
+    useEffect(() => {
+        setQuestion(allQuestions[0]);
+    }, [selectedNode, allQuestions]);
 
     const minTextareaRows = 1;
-    const maxTextareaRows = 3;
+    const maxTextareaRows = 50;
 
     const data = useActionData<typeof action>();
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const formRef = useRef<HTMLFormElement>(null);
-    const chatContainerRef = useRef<HTMLDivElement>(null);
     const navigation = useNavigation();
     const submit = useSubmit();
 
@@ -106,11 +113,11 @@ export default function IndexPage() {
     const navigate = useNavigate();
     const isSubmitting = navigation.state === 'submitting';
 
-    /**
-     * Handles the change event of a textarea element and adjusts its height based on the content.
-     * Note: Using the ref to alter the rows rather than state since it's more performant / faster.
-     * @param event - The change event of the textarea element.
-     */
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+            handleFormSubmit()
+        }
+    }
     const handleTextareaChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
         if (!inputRef.current) {
             return;
@@ -133,52 +140,24 @@ export default function IndexPage() {
         }
     };
 
-
-    /**
-     * Ensure the user message is added to the chat on submit (button press)
-     * @param event Event from the form
-     */
-    const handleFormSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-        const formData = new FormData(event.target as HTMLFormElement);
-        const message = formData.get('message');
-        submit(formRef.current, {replace: true});
-    };
-
-    /**
-     * Submits the form when the user pressed enter but not shift + enter
-     * Also saves a mesasge to the the chat history
-     *
-     * @param event The keydown event
-     */
-    const submitFormOnEnter = useCallback((event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        const value = (event.target as HTMLTextAreaElement).value;
-
-        if (event.key === 'Enter' && !event.shiftKey && value.trim().length > 2) {
-            submit(formRef.current, {replace: true});
-        }
-    }, [submit, formRef]);
-
-    /**
-     * Focuses the input element when the page is loaded and clears the
-     * input when the form is submitted
-     */
-    useEffect(() => {
-        if (!inputRef.current) {
+    const handleFormSubmit = () => {
+        let $form = formRef.current;
+        if (!$form) {
             return;
         }
-
-        if (navigation.state === 'submitting') {
-            inputRef.current.value = '';
-            inputRef.current.rows = 1;
+        const formData = new FormData($form);
+        if (!question) {
+            formData.set('question', inputRef.current?.value || "")
+            formData.set('context', selectedNode.context)
+            formData.set('parentNode', JSON.stringify(selectedNode))
         } else {
-            inputRef.current.focus();
+            formData.set('question', question)
+            formData.set('context', question)
+            formData.set('parentNode', JSON.stringify(selectedNode))
         }
-    }, [navigation.state]);
+        submit(formData, {replace: true, method: 'post'});
+    };
 
-    /**
-     * Adds the API's response message to the chat history
-     * when the data comes back from the action method
-     */
     useEffect(() => {
         // @ts-ignore
         if (data?.newNode) {
@@ -201,12 +180,13 @@ export default function IndexPage() {
                     <label htmlFor="message" className="absolute left[-9999px] w-px h-px overflow-hidden">prompt for a
                         new document</label>
                     <textarea
-                        id="message"
+                        id="context"
                         aria-disabled={isSubmitting}
                         ref={inputRef}
                         className="auto-growing-input m-0 appearance-none text-black placeholder:text-black resize-none text-sm md:text-base py-3 pl-5 pr-14 border border-slate-400 outline-none rounded-4xl w-full block leading-6 bg-white"
                         placeholder=""
                         name="message"
+                        onKeyDown={handleKeyDown}
                         onChange={handleTextareaChange}
                         required
                         rows={1}
@@ -222,35 +202,14 @@ export default function IndexPage() {
                     >
                         <SendIcon/>
                     </button>
-                    <input
-                        type="hidden"
-                        value={JSON.stringify(documentTree)} name="chat-history"
-                    />
-                    <input
-                        type="hidden"
-                        value={question} name="chat-history"
-                    />
-
                 </div>
             </Form>
             <DocumentTree rootNode={documentTree}/>
+            <div>
+                SelectedNode: {selectedNode.question}
+                <br/>
+                Question: {question}
+            </div>
         </div>
     )
-}
-
-export function ErrorBoundary({error}: { error: Error }) {
-    return (
-        <main
-            className="container mx-auto rounded-lg h-full grid grid-rows-layout p-4 pb-0 sm:p-8 sm:pb-0 max-w-full sm:max-w-auto">
-            <div className="chat-container">
-                <div className="intro grid place-items-center h-full text-center">
-                    <div className="intro-content inline-block px-4 py-8 border border-error rounded-lg">
-                        <h1 className="text-3xl font-semibold">Oops, something went wrong!</h1>
-                        <p className="mt-4 text-error ">{error.message}</p>
-                        <p className="mt-4"><Link to="/">Back to chat</Link></p>
-                    </div>
-                </div>
-            </div>
-        </main>
-    );
 }

@@ -1,5 +1,5 @@
-import {TreeNode} from "~/treeUtils";
 import {useMemo} from "react";
+import {TreeNode} from "~/components/Tree";
 
 export function useAllQuestions(documentTree: TreeNode) {
     return useMemo(

@@ -1,82 +1,45 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {type ActionArgs} from '@remix-run/node';
-import {Form, Link, useActionData, useLocation, useNavigate, useNavigation, useSubmit} from '@remix-run/react';
+import {Form, useActionData, useLocation, useNavigate, useNavigation, useSubmit} from '@remix-run/react';
 import {Send as SendIcon} from '~/components/Icons';
-import type { TreeNode} from "~/treeUtils";
-import {createDocument, generateNode, insertNode} from "~/treeUtils";
-import RenderGreen from "~/components/RenderGreen";
+import {generateNode, insertNode} from "~/treeUtils";
 import type {ReturnedDataProps} from "~/types";
 import {useAllQuestions} from "~/routes/useAllQuestions";
+import {convertToNodeType, TreeNode, TreeNodeComponent} from "~/components/Tree";
+import {baseTreeNode} from "~/components/DocumentTree";
 
-interface DocumentNodeProps {
-    node: TreeNode;
-}
-
-interface DocumentTreeProps {
-    rootNode: TreeNode;
-}
-
-const DocumentNodeComponent: React.FC<DocumentNodeProps> = ({node}) => {
-    return (
-        <div style={{width: '100%', border: '1px solid black', marginBottom: '10px'}}>
-            <RenderGreen input={createDocument(node)}/>
-            <RenderGreen input={node.context}/>
-            <RenderGreen input={node.question}/>
-            {node.children.map((childNode, index) => (
-                <DocumentNodeComponent key={index} node={childNode}/>
-            ))}
-        </div>
-    );
+type GenerateNodeParams = { question: string, context: string, id: string | number };
+const functionMap = {
+    generateNode: async (params: GenerateNodeParams) => {
+        const { question, context, id } = params;
+        return await generateNode(question, context, id);
+    },
+    // Add other functions here
 };
-
-const DocumentTree: React.FC<DocumentTreeProps> = ({rootNode}) => (
-    <div style={{width: '100%'}}>
-        <DocumentNodeComponent node={rootNode}/>
-    </div>
-);
-
 /**
+ *
  * API call executed server side
  */
 export async function action({request}: ActionArgs): Promise<ReturnedDataProps> {
     const body = await request.formData();
-    const question = body.get('question') as string;
-    const context = body.get('context') as string;
+    const functionName = body.get('functionName') as string;
+    const functionParameters = JSON.parse(body.get('functionParameters') as string);
 
-    const chatHistory = JSON.parse(body.get('parentNode') as string) as TreeNode;
-
-    try {
-        return {
-            newNode: await generateNode(
-                question,
-                context,
-                chatHistory.id
-            )
-        };
-    } catch (error: any) {
-        return {
-            error: error
-        };
+    const functionToCall = functionMap[functionName as keyof typeof functionMap];
+    if (functionToCall) {
+        try {
+            const result = await functionToCall(functionParameters);
+            return {
+                newNode: result
+            };
+        } catch (error: any) {
+            return {
+                error: error
+            };
+        }
+    } else {
+        throw new Error(`Function ${functionName} not found`);
     }
-}
-
-const baseTreeNode: TreeNode = {
-    question: `
-    `,
-    context: `
-        Respond to the following in markdown.
-        Concerning a research project which answers the question "To what extent does China’s dual circulation strategy affect foreign pharmaceutical companies operating in China?" for a bachelors in international business in Asia. 
-        For any part of my requests which requires more detail or outside information, leave a placeholder 
-        {{Use the contents of the brackets to ask me for more information, like research papers, or just more detailed sections}}.
-        Be EXTREMELY liberal with your placeholders.  
-        I need each section to be extremely detailed and sourced, 
-        so ANY points of ambiguity should be wrapped in these double curly braces and have a well formed question inside.
-    `,
-    answer: "",
-    parentId: null,
-    id: -1,
-    summary: "Base Node",
-    children: []
 }
 
 export default function IndexPage() {
@@ -108,6 +71,17 @@ export default function IndexPage() {
     const formRef = useRef<HTMLFormElement>(null);
     const navigation = useNavigation();
     const submit = useSubmit();
+
+    const callFunction = (functionName: string, functionParameters: any) => {
+        let $form = formRef.current;
+        if (!$form) {
+            return;
+        }
+        const formData = new FormData($form);
+        formData.set('functionName', functionName);
+        formData.set('functionParameters', JSON.stringify(functionParameters));
+        submit(formData, {replace: true, method: 'post'});
+    };
 
     const location = useLocation();
     const navigate = useNavigate();
@@ -204,7 +178,7 @@ export default function IndexPage() {
                     </button>
                 </div>
             </Form>
-            <DocumentTree rootNode={documentTree}/>
+            <TreeNodeComponent label={"root"} width={50} childNodes={[convertToNodeType(documentTree)]} />
             <div>
                 SelectedNode: {selectedNode.question}
                 <br/>

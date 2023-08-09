@@ -1,5 +1,7 @@
 import fs from "fs";
-const queryChatGPT = async (prompt: string): Promise<string> => {
+import {TreeNode} from "~/components/Tree";
+
+export const queryChatGPT = async (prompt: string): Promise<string> => {
     // @ts-ignore
     const { ChatGPTAPI } = await import('chatgpt')
     const api = new ChatGPTAPI({
@@ -34,15 +36,6 @@ const queryChatGPT = async (prompt: string): Promise<string> => {
             throw e.response.data;
         });
 };
-export interface TreeNode {
-    question: string;
-    context: string;
-    answer: string;
-    parentId: number | null;
-    id: number;
-    children: TreeNode[];
-    summary: string;
-}
 // Function 1
 export function createDocument(node: TreeNode): string {
     let document = node.answer;

@@ -1,40 +1,57 @@
 import React from 'react';
 
 interface NodeType {
-    children: NodeType[];
+    childNodes: NodeType[];
     label: string;
 }
 
 interface PositionedNode extends NodeType {
     x: number;
     y: number;
-    label: string;
+    childNodes: PositionedNode[];
 }
 
 const layoutTree = (root: NodeType, spacing = { x: 200, y: 50 }): PositionedNode => {
     let y = 0;
 
     const layoutDFS = (node: NodeType, x = 0): PositionedNode => {
-        const children = node.children.map((child) => layoutDFS(child, x + spacing.x));
-        return { ...node, children, x, y: y++ * spacing.y };
+        const childNodes = node.childNodes.map((child) => layoutDFS(child, x + spacing.x));
+        return { ...node, childNodes, x, y: y++ * spacing.y };
     };
 
     return layoutDFS(root);
 };
 
-const NodeComponent: React.FC<PositionedNode & { width: number }> = ({ x, y, children, width }) => (
+const NodeComponent: React.FC<PositionedNode & { width: number }> = ({ x, y, childNodes, label, width }) => (
     <svg>
         <circle cx={x} cy={y} r={width / 2} />
-        {children.map((child, i) => (
+        <text x={x} y={y} textAnchor="middle" dy=".3em">{label}</text>
+        {childNodes.map((child, i) => (
             <line key={i} x1={x} y1={y} x2={child.x} y2={child.y} stroke="black" />
         ))}
-        {children.map((child, i) => (
+        {childNodes.map((child, i) => (
             <NodeComponent key={i} {...child} width={width} />
         ))}
     </svg>
 );
 
-const TreeNodeComponent: React.FC<NodeType & { width: number }> = ({ children, width }) => {
-    const positionedRoot = layoutTree({ children });
+export const TreeNodeComponent: React.FC<NodeType & { width: number }> = ({ childNodes, width }) => {
+    const positionedRoot = layoutTree({ childNodes, label: 'root' });
     return <NodeComponent {...positionedRoot} width={width} />;
+};
+
+export interface TreeNode {
+    question: string;
+    context: string;
+    answer: string;
+    parentId: number | null;
+    id: number;
+    children: TreeNode[];
+    summary: string;
+}
+
+export const convertToNodeType = (node: TreeNode): NodeType => {
+    const { children, summary } = node;
+    const childNodes = children.map(convertToNodeType);
+    return { childNodes, label: summary };
 };

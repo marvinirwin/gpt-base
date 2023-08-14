@@ -93,6 +93,8 @@ export const functionMap = {
         ).catch(e => {
             console.error(e);
         });
+
+        return await waitingResponses[pipelineId].promise;
     },
 modifyVerificationPrompt: async ({id, prompt}:{id: string, prompt: string}) => {
         const waitingVerification = waitingVerifications[id];

@@ -15,7 +15,7 @@ export async function action({request}: ActionArgs): Promise<any> {
     const functionToCall = functionMap[functionName as keyof typeof functionMap];
     if (functionToCall) {
         try {
-            return await functionToCall(functionParameters);
+            return (await functionToCall(functionParameters) || null);
         } catch (error: any) {
             return {
                 error: error

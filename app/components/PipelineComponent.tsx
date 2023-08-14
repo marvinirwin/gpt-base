@@ -49,7 +49,7 @@ export const PipeLineComponent: React.FC<PipelineProps> = (
     useEffect(() => {
         if (!pipelineId) {
             // Start the fetch
-            callFunctionStartPipelineFetcher('beginPipeline', initialPromptProp)
+            callFunctionStartPipelineFetcher('beginPipeline', {prompt: initialPromptProp})
         }
     }, [])
     // Get the result of the startPipelineFetcher

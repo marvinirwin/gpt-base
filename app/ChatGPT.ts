@@ -2,20 +2,26 @@ import {readFile, writeFile} from 'fs/promises';
 import { OpenAIApi, Configuration, ChatCompletionRequestMessage, ChatCompletionFunctions } from 'openai'; // Assuming these are the correct imports
 
 
+const cacheFilename = 'responseCache.json';
+let cache: Record<string, any> = {};
+let cacheLoaded = false;
 export async function getChatGPTResponse<T>(
     prompt: string,
     messages: ChatCompletionRequestMessage[],
     functions: ChatCompletionFunctions[],
     callbacks: ((params: any) => any)[]
 ): Promise<T> {
-    const cacheKey = `responseCache.${prompt + JSON.stringify(functions) + JSON.stringify(messages)}`;
-    let cachedResponse: T | null = null;
-    try {
-        const cacheContent = await readFile(cacheKey, 'utf8');
-        cachedResponse = JSON.parse(cacheContent) as T;
-    } catch (e) {
-        // Cache miss, do nothing
+    if (!cacheLoaded) {
+        try {
+            cache = JSON.parse(await readFile(cacheFilename, 'utf-8'));
+        } catch(e) {
+            console.error(`Couldn't read cache`);
+            cache = {};
+        }
     }
+    cacheLoaded = true;
+    const cacheKey = `responseCache.${prompt + JSON.stringify(functions) + JSON.stringify(messages)}`;
+    const cachedResponse = cache[cacheKey] as T;
 
     if (cachedResponse) {
         return cachedResponse;
@@ -30,7 +36,7 @@ export async function getChatGPTResponse<T>(
         };
         const GPTAPIKey = process.env.OPENAI_API_KEY;
         if (!GPTAPIKey){
-            console.error("'GPTAPIKey' not found within process.env.");
+            console.error("'OPENAI_API_KEY' not found within process.env.");
             return;
         }
         const configuration = new Configuration({
@@ -77,8 +83,9 @@ export async function getChatGPTResponse<T>(
 
     await sendUserMessage(prompt);
 
+    cache[cacheKey] = response;
     // Cache the response
-    await writeFile(cacheKey, JSON.stringify(response));
+    await writeFile(cacheFilename, JSON.stringify(cache));
 
     return response as unknown as T;
 }

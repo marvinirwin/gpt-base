@@ -1,52 +1,131 @@
+import {useFetcher, useSubmit} from '@remix-run/react';
 import React, { useState, useEffect, KeyboardEvent } from 'react';
+import {useCallBackendFunctionFetcher, useCallBackendFunctionSubmit} from "~/backendFns";
 
 type VerificationResult = {
     correct: boolean;
     reason: string;
 };
 
-type MyComponentProps = {
-    initialPrompt: string;
-    vertificationPrompt?: string;
-    onVertificationPromptEdited?: (newPrompt: string) => void;
-    fixingPrompt?: string;
-    onFixingPromptEdited?: (newPrompt: string) => void;
-    loadingString?: string;
+type PipelineProps = {
+    initialPromptProp: string;
+    verificationPromptProp?: string;
+    fixingPromptProp?: string;
+    loadingStringProp?: string;
+    pipelineId?: string;
+    resultProp?: string;
 };
 
-const PipeLineComponent: React.FC<MyComponentProps> = ({
-                                                     initialPrompt,
-                                                     vertificationPrompt = '',
-                                                     onVertificationPromptEdited,
-                                                     fixingPrompt = '',
-                                                     onFixingPromptEdited,
-                                                     loadingString = '',
-                                                 }) => {
+export enum PromptStages {
+    UnStarted="UnStarted",
+    Verification = "Verification",
+    Fixing = "Fixing",
+    Finished="Finished",
+}
+export const PipeLineComponent: React.FC<PipelineProps> = (
+    {
+        initialPromptProp,
+        verificationPromptProp,
+        fixingPromptProp,
+        resultProp,
+        pipelineId
+    }) => {
+    const startPipelineFetcher = useFetcher();
+    const callFunctionStartPipelineFetcher = useCallBackendFunctionFetcher(startPipelineFetcher);
+    const modifyVerificationPromptFetcher = useFetcher();
+    const callModifyVerificationPromptFetcher = useCallBackendFunctionFetcher(modifyVerificationPromptFetcher);
+    const fixingPromptFetcher = useFetcher();
+    const callFixingPromptFetcher = useCallBackendFunctionFetcher(fixingPromptFetcher);
+    const [pipelineStage, setPipelineStage] = useState<PromptStages>(PromptStages.UnStarted);
+    const [result, setResult] = useState<string>(resultProp || "");
+    const [nextPrompt, setNextPrompt] = useState<string>("");
     const [verificationPromptState, setVerificationPromptState] = useState(
-        vertificationPrompt
+        verificationPromptProp
     );
-    const [fixingPromptState, setFixingPromptState] = useState(fixingPrompt);
-
+    const [fixingPromptState, setFixingPromptState] = useState(fixingPromptProp);
+    const [processId, setProcessId] = useState('');
+    const isEditingVerificationPrompt = pipelineStage === PromptStages.Verification;
+    const isEditingFixingPrompt = pipelineStage === PromptStages.Fixing;
     useEffect(() => {
-        setVerificationPromptState(vertificationPrompt);
-        setFixingPromptState(fixingPrompt);
-    }, [vertificationPrompt, fixingPrompt]);
+        if (!pipelineId) {
+            // Start the fetch
+            callFunctionStartPipelineFetcher('beginPipeline', initialPromptProp)
+        }
+    }, [])
+    // Get the result of the startPipelineFetcher
+    useEffect(() => {
+        if (startPipelineFetcher.data) {
+            setProcessId(startPipelineFetcher.data.id);
+            setVerificationPromptState(startPipelineFetcher.data.prompt);
+            setPipelineStage(PromptStages.Verification);
+        }
+    }, [startPipelineFetcher.data])
+
+    // Submit the modified verification prompt
+    const submitVerificationPrompt = (newPrompt: string) => {
+        callModifyVerificationPromptFetcher(
+             'modifyVerificationPrompt',
+             {
+                id: processId,
+                prompt: newPrompt
+            }
+        )
+    }
+    // Receive the fixing prompt, or mark the whole thing as completed
+    useEffect(() => {
+        if (modifyVerificationPromptFetcher.data) {
+            if (modifyVerificationPromptFetcher.data.pipelineState === PromptStages.Finished) {
+                setResult(modifyVerificationPromptFetcher.data.result);
+                setPipelineStage(PromptStages.Finished);
+            } else {
+                setFixingPromptState(modifyVerificationPromptFetcher.data.prompt);
+                setPipelineStage(PromptStages.Fixing);
+            }
+        }
+    }, [modifyVerificationPromptFetcher.data])
+
+    const submitFixingPrompt = (newPrompt: string) => {
+        callFixingPromptFetcher(
+             'modifyFixingPrompt',
+             {
+                id: processId,
+                prompt: newPrompt
+            }
+        )
+    }
+    useEffect(() => {
+        if (fixingPromptFetcher.data) {
+            if (fixingPromptFetcher.data.pipelineState === PromptStages.Finished) {
+                setResult(fixingPromptFetcher.data.result);
+                setPipelineStage(PromptStages.Fixing);
+            } else {
+                setNextPrompt(fixingPromptFetcher.data.nextPrompt)
+            }
+            setPipelineStage(PromptStages.Finished);
+        }
+    }, [fixingPromptFetcher.data])
 
     const handleKeyDown = (
         event: KeyboardEvent<HTMLTextAreaElement>,
-        callback?: (newValue: string) => void
+        promptType: 'verification' | 'fixing'
     ) => {
         if (event.key === 'Enter' && event.ctrlKey) {
-            callback && callback((event.target as HTMLTextAreaElement).value);
+            const newPrompt = (event.target as HTMLTextAreaElement).value;
+            if (isEditingFixingPrompt && promptType === 'fixing') {
+                submitFixingPrompt(newPrompt)
+            }
+            if (isEditingVerificationPrompt && promptType === 'verification') {
+                submitVerificationPrompt(newPrompt);
+            }
         }
     };
 
     return (
         <div>
-            <div>{loadingString}</div>
+            <div>{pipelineStage}</div>
             <label>
                 Initial Prompt:
-                <textarea readOnly value={initialPrompt} />
+                <textarea readOnly value={initialPromptProp}/>
             </label>
             <label>
                 Verification Prompt:
@@ -56,7 +135,7 @@ const PipeLineComponent: React.FC<MyComponentProps> = ({
                         setVerificationPromptState(event.target.value)
                     }
                     onKeyDown={(event) =>
-                        handleKeyDown(event, onVertificationPromptEdited)
+                        handleKeyDown(event, 'verification')
                     }
                 />
             </label>
@@ -65,7 +144,7 @@ const PipeLineComponent: React.FC<MyComponentProps> = ({
                 <textarea
                     value={fixingPromptState}
                     onChange={(event) => setFixingPromptState(event.target.value)}
-                    onKeyDown={(event) => handleKeyDown(event, onFixingPromptEdited)}
+                    onKeyDown={(event) => handleKeyDown(event, 'fixing')}
                 />
             </label>
         </div>

@@ -1,9 +1,6 @@
-import * as fs from 'fs';
-import { promisify } from 'util';
+import {readFile, writeFile} from 'fs/promises';
 import { OpenAIApi, Configuration, ChatCompletionRequestMessage, ChatCompletionFunctions } from 'openai'; // Assuming these are the correct imports
 
-const readFileAsync = promisify(fs.readFile);
-const writeFileAsync = promisify(fs.writeFile);
 
 export async function getChatGPTResponse<T>(
     prompt: string,
@@ -14,7 +11,7 @@ export async function getChatGPTResponse<T>(
     const cacheKey = `responseCache.${prompt + JSON.stringify(functions) + JSON.stringify(messages)}`;
     let cachedResponse: T | null = null;
     try {
-        const cacheContent = await readFileAsync(cacheKey, 'utf8');
+        const cacheContent = await readFile(cacheKey, 'utf8');
         cachedResponse = JSON.parse(cacheContent) as T;
     } catch (e) {
         // Cache miss, do nothing
@@ -31,7 +28,7 @@ export async function getChatGPTResponse<T>(
             role: 'user',
             content: input,
         };
-        const GPTAPIKey = process.env.GPTAPIKey;
+        const GPTAPIKey = process.env.OPENAI_API_KEY;
         if (!GPTAPIKey){
             console.error("'GPTAPIKey' not found within process.env.");
             return;
@@ -81,7 +78,7 @@ export async function getChatGPTResponse<T>(
     await sendUserMessage(prompt);
 
     // Cache the response
-    await writeFileAsync(cacheKey, JSON.stringify(response));
+    await writeFile(cacheKey, JSON.stringify(response));
 
     return response as unknown as T;
 }

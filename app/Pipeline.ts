@@ -1,8 +1,6 @@
-// Assuming askLanguageModel, getPromptModifications are defined somewhere else
-// and they both return a Promise<string>
-import {queryChatGPT} from './treeUtils';
 import {getChatGPTResponse} from "~/ChatGPT";
 import {ChatCompletionFunctions} from "openai";
+import {v4 as uuidv4} from 'uuid'
 
 const askLanguageModel = (
     prompt: string,
@@ -27,25 +25,35 @@ const askLanguageModelShape = <T>(
     );
 }
 
-async function processPrompt(
+export enum PromptStages {
+    Verification = "Verification",
+    Fixing = "Fixing",
+    Finished="Finished",
+}
+
+type GetPromptModifications = (id: string, prompt: string, stage: PromptStages) => Promise<string>;
+
+export async function processPrompt(
     initialPrompt: string,
-    getPromptModifications: (prompt: string) => Promise<string>
+    getPromptModifications: GetPromptModifications,
+    sendResponse: (v: any) => Promise<void>,
+    id: string,
 ): Promise<string> {
-    let initialResult = await askLanguageModel(initialPrompt);
+    let result = await askLanguageModel(initialPrompt);
     let verificationPrompt = await askLanguageModel(
         `The following is a request to a language model.  
         Can you respond with a prompt which will be used to verify that the language model completed the request in the prompt correctly?
         ${initialPrompt}
         `
     );
-    verificationPrompt = await getPromptModifications(verificationPrompt);
-
+    await sendResponse({id, result, verificationPrompt, stage: PromptStages.Verification});
+    verificationPrompt = await getPromptModifications(id, verificationPrompt, PromptStages.Verification);
 
     let verificationResult = await askLanguageModelShape<{ correct: boolean, reason: string }>(
         `
         The following is a criteria for completion of a request: "${verificationPrompt}".
         Does the following response to the request fulfill the criteria?
-        ${initialResult}
+        ${result}
         `,
         {
             "name": "evaluateCorrectness",
@@ -74,11 +82,12 @@ async function processPrompt(
     );
 
     if (!verificationResult.correct) {
-        let fixingPrompt = await askLanguageModel(initialResult);
-        fixingPrompt = await getPromptModifications(fixingPrompt);
-
-        return processPrompt(fixingPrompt, getPromptModifications);
+        let fixingPrompt = await askLanguageModel(result);
+        await sendResponse({id, fixingPrompt, stage: PromptStages.Fixing});
+        fixingPrompt = await getPromptModifications(id, fixingPrompt, PromptStages.Fixing);
+        return processPrompt(fixingPrompt, getPromptModifications, sendResponse, id);
     }
 
-    return initialResult;
+    await sendResponse({id, result: result, stage: PromptStages.Finished});
+    return result;
 }

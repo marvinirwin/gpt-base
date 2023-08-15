@@ -24,6 +24,12 @@ const askLanguageModelShape = <T>(
         [returnFunction]
     );
 }
+function evaluateCorrectness({correct, reason}: {correct: boolean, reason: string}) {
+    return {
+        correct,
+        reason
+    }
+}
 
 export enum PromptStages {
     Verification = "Verification",
@@ -43,13 +49,17 @@ export async function processPrompt(
     let verificationPrompt = await askLanguageModel(
         `The following is a request to a language model.  
         Can you respond with a prompt which will be used to verify that the language model completed the request in the prompt correctly?
-        ${initialPrompt}
-        `
+        ${initialPrompt}`
     );
-    await sendResponse({id, result, verificationPrompt, stage: PromptStages.Verification});
+    await sendResponse({
+        id,
+        result,
+        prompt: verificationPrompt,
+        stage: PromptStages.Fixing
+    });
     verificationPrompt = await getPromptModifications(id, verificationPrompt, PromptStages.Verification);
 
-    let verificationResult = await askLanguageModelShape<{ correct: boolean, reason: string }>(
+    const verificationResult = await askLanguageModelShape<{ correct: boolean, reason: string }>(
         `
         The following is a criteria for completion of a request: "${verificationPrompt}".
         Does the following response to the request fulfill the criteria?
@@ -73,12 +83,7 @@ export async function processPrompt(
                 "required": ["correct", "reason"]
             }
         },
-        ({correct, reason}) => {
-            return {
-                correct,
-                reason
-            }
-        }
+        evaluateCorrectness
     );
 
     if (!verificationResult.correct) {

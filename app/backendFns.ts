@@ -12,6 +12,7 @@ export function useCallBackendFunctionSubmit(submit: ReturnType<typeof useSubmit
     };
     return callFunction
 }
+
 export function useCallBackendFunctionFetcher(fetcher: ReturnType<typeof useFetcher<any>>) {
 
     const callFunction = async (functionName: string, functionParameters: any) => {
@@ -49,18 +50,28 @@ const getPromise = () => {
         reject
     }
 }
+declare global {
+    var waitingVerifications: Record<string, { promise: Promise<any>, resolve: (f: any) => any, stage: PromptStages }>
+    var waitingResponses: Record<string, { promise: Promise<any>, resolve: (f: any) => any, stage: PromptStages }>
+}
 export type GenerateNodeParams = { question: string, context: string, id: number | null };
-export const waitingVerifications: Record<string,  {promise: Promise<any>, resolve: (f: any) => any, stage: PromptStages}> = {}
-export const waitingResponses: Record<string,  {promise: Promise<any>, resolve: (f: any) => any, stage: PromptStages}> = {}
+if (!global.waitingVerifications) {
+    global.waitingVerifications = {};
+    global.waitingResponses = {};
+}
+/*
+export const waitingVerifications: Record<string, { promise: Promise<any>, resolve: (f: any) => any, stage: PromptStages }> = {}
+export const waitingResponses: Record<string, { promise: Promise<any>, resolve: (f: any) => any, stage: PromptStages }> = {}
+*/
 export const functionMap = {
     generateNode: async (params: GenerateNodeParams) => {
         const {question, context, id} = params;
         return await generateNode(question, context, id);
     },
-    beginPipeline: async ({prompt}:{prompt: string}) => {
+    beginPipeline: async ({prompt}: { prompt: string }) => {
         const pipelineId = uuidv4()
         const responsePromise = getPromise();
-        waitingResponses[pipelineId] = {
+        global.waitingResponses[pipelineId] = {
             promise: responsePromise.promise,
             resolve: responsePromise.resolve,
             stage: PromptStages.Verification
@@ -69,7 +80,7 @@ export const functionMap = {
             prompt,
             async (id: string, prompt: string, stage: PromptStages) => {
                 const verificationPromise = getPromise();
-                waitingVerifications[id] = {
+                global.waitingVerifications[id] = {
                     promise: verificationPromise.promise,
                     resolve: verificationPromise.resolve,
                     stage: stage,
@@ -77,16 +88,19 @@ export const functionMap = {
                 return await verificationPromise.promise;
             },
             async ({id, stage, ...other}) => {
-                const promise = waitingResponses[id];
+                const promise = global.waitingResponses[id];
                 if (!promise) {
                     throw new Error(`No response promise found for ${id}`);
                 }
+/*
                 if (promise.stage !== stage) {
-                    throw new Error(`Stage mismatch ${stage} ${promise.stage}`);
+                    throw new Error(`Stage mismatch. Promise stage:${promise.stage}, Response Stage: ${stage}`);
                 }
+*/
                 promise.resolve({
                     stage,
-                    ...other
+                    id,
+                    ...other,
                 });
             },
             pipelineId
@@ -94,40 +108,44 @@ export const functionMap = {
             console.error(e);
         });
 
-        return await waitingResponses[pipelineId].promise;
+        return await global.waitingResponses[pipelineId].promise;
     },
-modifyVerificationPrompt: async ({id, prompt}:{id: string, prompt: string}) => {
-        const waitingVerification = waitingVerifications[id];
+    modifyVerificationPrompt: async ({id, prompt}: { id: string, prompt: string }) => {
+        const waitingVerification = global.waitingVerifications[id];
         if (!waitingVerification) {
             throw new Error(`No verification promise found for ${id}`);
         }
+/*
         if (waitingVerification.stage !== PromptStages.Verification) {
-            throw new Error(`Stage mismatch ${PromptStages.Verification} ${waitingVerification.stage}`);
+            throw new Error(`Stage mismatch.  Intended Stage: ${PromptStages.Verification} Waiting verification stage: ${waitingVerification.stage}`);
         }
+*/
         waitingVerification.resolve(prompt);
         // Look up that specific pipeline and check that its in progress at
         // the correct stage before submitting
         const responsePromise = getPromise();
-        waitingResponses[id] = {
+        global.waitingResponses[id] = {
             promise: responsePromise.promise,
             resolve: responsePromise.resolve,
             stage: PromptStages.Verification
         }
         return await responsePromise.promise;
     },
-    modifyFixingPrompt: async ({id, prompt}:{id: string, prompt: string}) => {
-        const waitingVerification = waitingVerifications[id];
+    modifyFixingPrompt: async ({id, prompt}: { id: string, prompt: string }) => {
+        const waitingVerification = global.waitingVerifications[id];
         if (!waitingVerification) {
             throw new Error(`No verification promise found for ${id}`);
         }
+/*
         if (waitingVerification.stage !== PromptStages.Fixing) {
             throw new Error(`Stage mismatch ${PromptStages.Fixing} ${waitingVerification.stage}`);
         }
+*/
         waitingVerification.resolve(prompt);
         // Look up that specific pipeline and check that its in progress at
         // the correct stage before submitting
         const responsePromise = getPromise();
-        waitingResponses[id] = {
+        global.waitingResponses[id] = {
             promise: responsePromise.promise,
             resolve: responsePromise.resolve,
             stage: PromptStages.Fixing

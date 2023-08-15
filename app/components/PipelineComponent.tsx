@@ -1,6 +1,6 @@
-import {useFetcher, useSubmit} from '@remix-run/react';
+import {useFetcher} from '@remix-run/react';
 import React, { useState, useEffect, KeyboardEvent } from 'react';
-import {useCallBackendFunctionFetcher, useCallBackendFunctionSubmit} from "~/backendFns";
+import {useCallBackendFunctionFetcher} from "~/backendFns";
 
 type VerificationResult = {
     correct: boolean;
@@ -74,7 +74,7 @@ export const PipeLineComponent: React.FC<PipelineProps> = (
     // Receive the fixing prompt, or mark the whole thing as completed
     useEffect(() => {
         if (modifyVerificationPromptFetcher.data) {
-            if (modifyVerificationPromptFetcher.data.pipelineState === PromptStages.Finished) {
+            if (modifyVerificationPromptFetcher.data.stage === PromptStages.Finished) {
                 setResult(modifyVerificationPromptFetcher.data.result);
                 setPipelineStage(PromptStages.Finished);
             } else {
@@ -121,28 +121,39 @@ export const PipeLineComponent: React.FC<PipelineProps> = (
     };
 
     return (
-        <div>
-            <div>{pipelineStage}</div>
-            <label>
-                Initial Prompt:
-                <textarea readOnly value={initialPromptProp}/>
+        <div className="flex flex-col w-full px-4">
+            <div className="text-lg font-bold mb-4">ProcessId: {processId} Stage: {pipelineStage}</div>
+
+            <label className="mb-2">
+                <span className="text-sm font-medium text-gray-700">Initial Prompt:</span>
+                <textarea className="mt-1 p-2 w-full h-20 border rounded-md" readOnly value={initialPromptProp} />
             </label>
-            <label>
-                Verification Prompt:
+
+            <label className="mb-2">
+                <span className="text-sm font-medium text-gray-700">Verification Prompt:</span>
                 <textarea
+                    className="mt-1 p-2 w-full h-20 border rounded-md"
                     value={verificationPromptState}
-                    onChange={(event) =>
-                        setVerificationPromptState(event.target.value)
-                    }
-                    onKeyDown={(event) =>
-                        handleKeyDown(event, 'verification')
-                    }
+                    onChange={(event) => setVerificationPromptState(event.target.value)}
+                    onKeyDown={(event) => handleKeyDown(event, 'verification')}
                 />
             </label>
-            <label>
-                Fixing Prompt:
+
+            <label className="mb-2">
+                <span className="text-sm font-medium text-gray-700">Fixing Prompt:</span>
                 <textarea
+                    className="mt-1 p-2 w-full h-20 border rounded-md"
                     value={fixingPromptState}
+                    onChange={(event) => setFixingPromptState(event.target.value)}
+                    onKeyDown={(event) => handleKeyDown(event, 'fixing')}
+                />
+            </label>
+
+            <label className="mb-2">
+                <span className="text-sm font-medium text-gray-700">Result:</span>
+                <textarea
+                    className="mt-1 p-2 w-full h-20 border rounded-md"
+                    value={result}
                     onChange={(event) => setFixingPromptState(event.target.value)}
                     onKeyDown={(event) => handleKeyDown(event, 'fixing')}
                 />

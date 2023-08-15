@@ -13,12 +13,13 @@ export async function action({request}: ActionArgs): Promise<any> {
     const functionParameters = JSON.parse(body.get('functionParameters') as string);
 
     const functionToCall = functionMap[functionName as keyof typeof functionMap];
+    console.log(functionName, functionParameters.id);
     if (functionToCall) {
         try {
             return (await functionToCall(functionParameters) || null);
         } catch (error: any) {
             return {
-                error: error
+                error: error.message
             };
         }
     } else {
@@ -29,8 +30,7 @@ export async function action({request}: ActionArgs): Promise<any> {
 }
 
 
-const initialPrompt = `
-Can you write me a Typescript NodeJs discord bot which allows a user to set a 
+const initialPrompt = `Can you write me a Typescript NodeJs discord bot which allows a user to set a 
 goal for a date, and then insults them if they have not completed it by a date?
 
 When a user submits a goal, the goal is given a unique id (unix time in ms) and returned to the user.

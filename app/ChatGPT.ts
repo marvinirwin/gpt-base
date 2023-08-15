@@ -45,7 +45,7 @@ export async function getChatGPTResponse<T>(
         const openai = new OpenAIApi(configuration);
 
         try {
-            const GPTModel = process.env.GOTModel || "gpt-4-0613";
+            const GPTModel = process.env.GPT_MODEL || "gpt-4-0613";
             const completion = await openai.createChatCompletion({
                 model: GPTModel,
                 messages: messages.concat(requestMessage),
@@ -59,7 +59,7 @@ export async function getChatGPTResponse<T>(
                 const function_name = responseMessage?.function_call?.name;
                 const foundFunction = callbacks.find(callback => callback.name === function_name);
                 if (!foundFunction) {
-                    throw new Error(`ChatGPT function ${function_name} not found`);
+                    throw new Error(`what the fuck ChatGPT function ${function_name} not found`);
                 }
                 responseContent = foundFunction(
                     JSON.parse(responseMessage?.function_call?.arguments || "{}")

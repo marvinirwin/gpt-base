@@ -1,15 +1,15 @@
-import { useHistory, useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useCallback } from 'react';
 
-function useUrlSelection() {
-    const history = useHistory();
+export function useUrlSelection() {
+    const navigate = useNavigate();
     const location = useLocation();
 
     const selectItem = useCallback(
         (id: string) => {
-            history.push({ ...location, search: `?selected=${id}` });
+            navigate({ ...location, search: `?selected=${id}` });
         },
-        [history, location]
+        [navigate, location]
     );
 
     const selectedId = new URLSearchParams(location.search).get('selected');

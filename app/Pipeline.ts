@@ -46,6 +46,7 @@ export async function processPrompt(
     id: string,
 ): Promise<string> {
     let result = await askLanguageModel(initialPrompt);
+    let summaryPrompt = await askLanguageModel(`Summarize the following in less than 25 characters: ${initialPrompt}`);
     let verificationPrompt = await askLanguageModel(
         `The following is a request to a language model.  
         Can you respond with a prompt which will be used to verify that the language model completed the request in the prompt correctly?
@@ -55,6 +56,7 @@ export async function processPrompt(
         id,
         result,
         prompt: verificationPrompt,
+        summary: summaryPrompt,
         stage: PromptStages.Fixing
     });
     verificationPrompt = await getPromptModifications(id, verificationPrompt, PromptStages.Verification);
